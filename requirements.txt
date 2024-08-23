@@ -1,0 +1,6 @@
+pyautogen
+autogen
+h2o_wave
+websockets
+dotenv
+markdown
