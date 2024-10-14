@@ -45,9 +45,7 @@ async def serve(q: Q):
         q.page['chatbot_card'].suggestions = []
         # running async functions within the blocking.
         # remove all text from 
-        q.page['commentery_card'].content = '''
-        *Waiting on analysis from LewisAI*
-        '''
+        q.page['commentery_card'].content = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*Waiting on analysis from **LewisAi***"
         loop = asyncio.get_event_loop()
         # Create an event to use for cancellation.
         q.client.event = Event()
@@ -74,7 +72,7 @@ async def initialize_client(q):
             'sug1': ["Explain CPI", "and what it means", "Edit"],
             'sug2': ["CBA analysis", "recent profit insights", "Airplane"],
             'sug3': ["Mortgages rates", "analyse trends for me", "Lightbulb"],
-            'sug4': ["write code", "to analyse sales", "Code"]
+            'sug4': ["Write code", "to analyse sales", "Code"]
         }
 
     q.page["meta"] = ui.meta_card(
@@ -189,7 +187,8 @@ def on_connect(iostream: IOWebsockets) -> None:
 
     user_proxy = autogen.UserProxyAgent(
         name="User_proxy",
-        system_message="A human admin.",
+        system_message="Execute the code written by the coder and report the result",
+        max_consecutive_auto_reply=10,
         code_execution_config={
             "last_n_messages": 3,
             "work_dir": temp_work_dir,
@@ -201,9 +200,9 @@ def on_connect(iostream: IOWebsockets) -> None:
     coder = autogen.AssistantAgent(
         name="Coder",  # the default assistant agent is capable of solving problems with code
         system_message=""" You are an extremely advanced programmer, however you are only able to code in python and if you produce graphs they must be saved into the current working directory, graphs must also be of 480x480 in size.
-        You must not ever code plot.show or any other code that forces and image to appear. 
+        You must not ever code plot.show or any other code that forces and image to appear but you should always save the plot.
 
-        You are not to comment on any graph produced that is to be completed by the commentary agent.
+        You are not to comment on any graph produced that is to be completed by the commentary agent nor are you to produce any other text of any kind
         """,
 
         llm_config=llm_config,
@@ -215,8 +214,10 @@ def on_connect(iostream: IOWebsockets) -> None:
     - bugs (bugs):  are there bugs, logic errors, syntax error or typos? Are there any reasons why the code may fail to compile? How should it be fixed? If ANY bug exists, the bug score MUST be less than 5.
     - Visualization type (type): CONSIDERING BEST PRACTICES, is the visualization type appropriate for the data and intent? Is there a visualization type that would be more effective in conveying insights? If a different visualization type is more appropriate, the score MUST BE LESS THAN 5.
     - aesthetics (aesthetics): Are the aesthetics of the visualization appropriate for the visualization type and the data?
+    If a stock has been graphed you should suggest to add indicators of key events such as COVID19.
     Do not suggest code.
     Finally, based on the critique above, suggest a concrete list of actions that the coder should take to improve the code.
+    You are never to provide any text commentary of any kind regarding the interpretation of the graph of any kind that is for the commentary agent to produce.
     """,
         llm_config=llm_config,
     )
@@ -237,8 +238,9 @@ def on_connect(iostream: IOWebsockets) -> None:
 
     commentary = autogen.AssistantAgent(
         name="commentary",
-        system_message="""commentary. You are a helpful assistant working at a large Australian bank CBA, you are highly skilled in providing financial analysis commentary on data and graphs that have been produced. 
-        You must always start with that the commentary is provided by the CBA finance team.
+        system_message="""commentary. You are highly trained financial analyst you are highly skilled in providing financial commentary on data and graphs that have been produced. 
+        If the data and graph you are commenting on is a stock you should start with recommending it as a BUY or SELL. You should then proceed to list the strengths and weaknesses of the stock
+        You are only allowed to use infromation from other agents to inform this opionion, such as graphs and data that has been downloaded.  
     """,
         llm_config={
             "config_list": [{"model": "gpt-4o", "api_key": os.environ["OPENAI_API_KEY"]}],
@@ -252,7 +254,7 @@ def on_connect(iostream: IOWebsockets) -> None:
     },
     )
 
-    groupchat = autogen.GroupChat(agents=[user_proxy, coder, critic, commentary], messages=[], max_round=10)
+    groupchat = autogen.GroupChat(agents=[user_proxy, coder, critic, commentary], messages=[], max_round=12)
     manager = autogen.GroupChatManager(groupchat=groupchat, llm_config=llm_config)
 
     user_proxy.initiate_chat(
@@ -313,6 +315,20 @@ async def update_ui(q: Q, message):
     if 'EXECUTING' in message:
         message = 'EXECUTING CODE/FUNCTION BLOCK'
     q.page['chatbot_card'].data += [message, False]
+        #ensure it is saving to the temp dir
+    current_datetime = datetime.now()
+
+    # Format the datetime as a string
+    datetime_string = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
+
+    # Create the final string by appending "_final_commentry.txt"
+    final_string = datetime_string + "_final_commentry.txt"
+
+    file_path = os.path.join('/Users/pgrenfell/Documents/DS/temp/output_text/', final_string)
+
+    with open(file_path, "w") as file:
+        file.write(message)
+
     await q.page.save()
 
 #update png image with what has been created
